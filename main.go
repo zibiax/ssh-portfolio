@@ -5,9 +5,11 @@ import (
 	"encoding/base64"
 	"fmt"
 	"log"
-	"os"
 	"strings"
 	"time"
+    "path/filepath"
+    "os/exec"
+    "os"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -78,6 +80,9 @@ func initialModel(fingerprint string) Model {
 }
 
 func getKeyFingerPrint(key ssh.PublicKey) string {
+    if key == nil {
+        return "unknown-key"
+    }
     hash := sha256.Sum256(key.Marshal())
     return base64.StdEncoding.EncodeToString(hash[:])
 }
@@ -205,12 +210,32 @@ func (m Model) View() string {
     return s.String()
 }
 
+func ensureHostKey(path string) error {
+    // Create directory if it doesn't exist
+    dir := filepath.Dir(path)
+    if err := os.MkdirAll(dir, 0700); err != nil {
+        return err
+    }
+
+    // Check if key already exists
+    if _, err := os.Stat(path); os.IsNotExist(err) {
+        // Create new key if it doesn't exist
+        cmd := fmt.Sprintf("ssh-keygen -t ed25519 -f %s -N \"\"", path)
+        return exec.Command("sh", "-c", cmd).Run()
+    }
+    return nil
+}
 
 func main() {
+    hostKeyPath := ".ssh/term_info_ed25519"
+    if err := ensureHostKey(hostKeyPath); err != nil {
+        log.Fatalf("Failed to ensure host key: %v", err)
+    }
+
     s, err := wish.NewServer(
         wish.WithAddress(":2500"),
 
-        wish.WithHostKeyPath(".ssh/id_ed25519"),
+        wish.WithHostKeyPath(hostKeyPath),
 
         wish.WithMiddleware(
            func(h ssh.Handler) ssh.Handler {
