@@ -7,14 +7,13 @@ import (
 	"log"
 	"os"
 	"strings"
-	_ "strings"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/ssh"
-	_ "github.com/charmbracelet/wish"
-	// bm "github.com/charmbracelet/wish/bubbletea"
+	"github.com/charmbracelet/wish"
+	bm "github.com/charmbracelet/wish/bubbletea"
 )
 
 type Project struct {
@@ -207,4 +206,36 @@ func (m Model) View() string {
 }
 
 
+func main() {
+    s, err := wish.NewServer(
+        wish.WithAddress(":2500"),
 
+        wish.WithHostKeyPath(".ssh/id_ed25519"),
+
+        wish.WithMiddleware(
+           func(h ssh.Handler) ssh.Handler {
+               return func(s ssh.Session) {
+                   fingerprint := getKeyFingerPrint(s.PublicKey())
+                   logAccess(fingerprint, "connected")
+                   h(s)
+               }
+           },
+
+        bm.Middleware(func(s ssh.Session) (tea.Model, []tea.ProgramOption) {
+            fingerprint := getKeyFingerPrint(s.PublicKey())
+            return initialModel(fingerprint), []tea.ProgramOption{tea.WithAltScreen()}
+        }),
+    ),
+)
+    if err != nil {
+        fmt.Println(err)
+        os.Exit(1)
+    }
+
+    fmt.Println("Starting SSH server on :2500")
+
+    if err := s.ListenAndServe(); err != nil {
+        fmt.Println(err)
+        os.Exit(1)
+    }
+}
